@@ -31,9 +31,10 @@ parser.add_argument('-bs', '--batch_size', type=int, help='Batch Size.')
 parser.add_argument('-res', '--reso', type=int, help='Input image resolution')
 parser.add_argument('-init_model', '--init_model', type=str, help='Initial model file')
 
-parser.add_argument('-epoch', '--epoch', type=int, default=15,help='Maximum Epoch')
+parser.add_argument('-epoch', '--epoch', type=int, default=10,help='Maximum Epoch')
 parser.add_argument('-n_blocks1', '--n_blocks1', type=int, default=7,help='Number of residual blocks after Context Switching.')
 parser.add_argument('-n_blocks2', '--n_blocks2', type=int, default=3,help='Number of residual blocks for Fg and alpha each.')
+parser.add_argument('-d', '--debug', type=str, default="", help='File to dump output')
 
 args=parser.parse_args()
 
@@ -41,6 +42,10 @@ args=parser.parse_args()
 tb_dir='TB_Summary/' + args.name
 model_dir='Models/' + args.name
 
+torch.manual_seed(1337)
+np.random.seed(1337)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 
 if not os.path.exists(model_dir):
 	os.makedirs(model_dir)
@@ -66,15 +71,15 @@ train_loader = torch.utils.data.DataLoader(traindata, batch_size=args.batch_size
 print('\n[Phase 2] : Initialization')
 
 netB=ResnetConditionHR(input_nc=(3,3,1,4),output_nc=4,n_blocks1=args.n_blocks1,n_blocks2=args.n_blocks2)
-netB=nn.DataParallel(netB)
-netB.load_state_dict(torch.load(args.init_model))
+#netB=nn.DataParallel(netB)
+#netB.load_state_dict(torch.load(args.init_model))
 netB.cuda(); netB.eval()
 for param in netB.parameters(): #freeze netD
 	param.requires_grad = False
 
 netG=ResnetConditionHR(input_nc=(3,3,1,4),output_nc=4,n_blocks1=args.n_blocks1,n_blocks2=args.n_blocks2)
 netG.apply(conv_init)
-netG=nn.DataParallel(netG)
+#netG=nn.DataParallel(netG)
 netG.cuda()
 torch.backends.cudnn.benchmark=True
 
@@ -92,16 +97,15 @@ GAN_loss=GANloss()
 optimizerG = optim.Adam(netG.parameters(), lr=1e-4)
 optimizerD = optim.Adam(netD.parameters(), lr=1e-5)
 
-
-
 log_writer=SummaryWriter(tb_dir)
 
-print('Starting Training')
 step=50
 
 KK=len(train_loader)
 
 wt=1
+
+print('Starting training')
 for epoch in range(0,args.epoch):
 
 	netG.train(); netD.train()
@@ -131,6 +135,8 @@ for epoch in range(0,args.epoch):
 		## Train Generator
 
 		alpha_pred,fg_pred=netG(image,bg,seg,multi_fr)
+		if args.debug:
+			torch.save(fg_pred, args.debug)
 
 		##pseudo-supervised losses
 		al_loss=l1_loss(alpha_pred_sup,alpha_pred,mask0)+0.5*g_loss(alpha_pred_sup,alpha_pred,mask0)
