@@ -5,3 +5,4 @@ if [ $# -gt 1 ]; then
         fi
 fi
 CUDA_VISIBLE_DEVICES=0,1 python train_real_fixed.py -n Real_fixed -bs 4 -res 512 $debug_arg
+CUDA_VISIBLE_DEVICES=0,1 python train_real_fixed.py -n Real_fixed -bs 4 -res 512 --trace 1 $debug_arg.trace

@@ -35,6 +35,7 @@ parser.add_argument('-epoch', '--epoch', type=int, default=10,help='Maximum Epoc
 parser.add_argument('-n_blocks1', '--n_blocks1', type=int, default=7,help='Number of residual blocks after Context Switching.')
 parser.add_argument('-n_blocks2', '--n_blocks2', type=int, default=3,help='Number of residual blocks for Fg and alpha each.')
 parser.add_argument('-d', '--debug', type=str, default="", help='File to dump output')
+parser.add_argument('-t', '--trace', type=bool, default=False, help='Trace the model')
 
 args=parser.parse_args()
 
@@ -104,6 +105,18 @@ step=50
 KK=len(train_loader)
 
 wt=1
+
+print('Tracing')
+for data in train_loader:
+  bg, image, seg, multi_fr =  data['bg'], data['image'], data['seg'], data['multi_fr']
+  bg, image, seg, multi_fr = Variable(bg.cuda()), Variable(image.cuda()), Variable(seg.cuda()), Variable(multi_fr.cuda())
+  if args.trace:
+    netB = torch.jit.trace(netB,(image,bg,seg,multi_fr))
+    netG = torch.jit.trace(netG,(image,bg,seg,multi_fr))
+  else:
+    netB(image,bg,seg,multi_fr)
+    netG(image,bg,seg,multi_fr)
+  break
 
 print('Starting training')
 for epoch in range(0,args.epoch):
