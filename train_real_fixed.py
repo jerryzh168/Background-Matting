@@ -36,6 +36,7 @@ parser.add_argument('-n_blocks1', '--n_blocks1', type=int, default=7,help='Numbe
 parser.add_argument('-n_blocks2', '--n_blocks2', type=int, default=3,help='Number of residual blocks for Fg and alpha each.')
 parser.add_argument('-d', '--debug', type=str, default="", help='File to dump output')
 parser.add_argument('-t', '--trace', type=bool, default=False, help='Trace the model')
+parser.add_argument('-q', '--quantize', type=bool, default=False, help='Quantize the model')
 
 args=parser.parse_args()
 
@@ -113,6 +114,13 @@ for data in train_loader:
   if args.trace:
     netB = torch.jit.trace(netB,(image,bg,seg,multi_fr))
     netG = torch.jit.trace(netG,(image,bg,seg,multi_fr))
+    if args.quantize:
+        input_data = (image, bg, seg, multi_fr)
+        from torch.quantization import default_qconfig, quantize_jit
+        def calibrate(model, data):
+            model(data)
+        netB_quantized = quantize_jit(netB, {'': default_qconfig}, calibrate, [input_data])
+        netG_quantized = quantize_jit(netG, {'': default_qconfig}, calibrate, [input_data])
   else:
     netB(image,bg,seg,multi_fr)
     netG(image,bg,seg,multi_fr)
@@ -170,7 +178,7 @@ for epoch in range(0,args.epoch):
 		if np.random.random_sample() > 0.5:
 			bg_sh=back_rnd
 
-		image_sh=compose_image_withshift(alpha_pred,image*al_mask + fg_pred*(1-al_mask),bg_sh,seg) 
+		image_sh=compose_image_withshift(alpha_pred,image*al_mask + fg_pred*(1-al_mask),bg_sh,seg)
 
 		fake_response=netD(image_sh)
 
@@ -184,7 +192,7 @@ for epoch in range(0,args.epoch):
 		optimizerG.step()
 
 		##Train Discriminator
-		
+
 		fake_response=netD(image_sh); real_response=netD(image)
 
 		loss_ganD_fake=GAN_loss(fake_response,label_type=False)
@@ -245,13 +253,13 @@ for epoch in range(0,args.epoch):
 			write_tb_log(comp,'composite-same',log_writer,i)
 			write_tb_log(image_sh,'composite-diff',log_writer,i)
 
-			
+
 			del comp
 
 		del mask, back_rnd, mask0, seg_gt, mask1, bg, alpha_pred, alpha_pred_sup, image, fg_pred_sup, fg_pred, seg, multi_fr,image_sh, bg_sh, fake_response, real_response, al_loss, fg_loss, comp_loss, lossG, lossD, loss_ganD_real, loss_ganD_fake, loss_ganG
 
 
-	
+
 	if (epoch%2 == 0):
 		torch.save(netG.state_dict(), model_dir + 'netG_epoch_%d.pth' %(epoch))
 		torch.save(optimizerG.state_dict(), model_dir + 'optimG_epoch_%d.pth' %(epoch))
